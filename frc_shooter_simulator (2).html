@@ -1,0 +1,510 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>FRC 2026 Shooter Trajectory Simulator</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #0a0a0a;
+            color: #ffffff;
+        }
+        #container {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+        }
+        #controls {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0,0,0,0.9);
+            padding: 20px;
+            border-radius: 10px;
+            z-index: 100;
+            width: 320px;
+            max-height: 90vh;
+            overflow-y: auto;
+            border: 2px solid #00ff00;
+        }
+        h3 {
+            margin-top: 0;
+            color: #00ffff;
+            border-bottom: 2px solid #00ffff;
+            padding-bottom: 10px;
+        }
+        .control-group {
+            margin-bottom: 18px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 13px;
+            color: #00ff00;
+            font-weight: 500;
+        }
+        input[type="range"] {
+            width: 100%;
+            height: 6px;
+            background: #333;
+            outline: none;
+            border-radius: 3px;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            background: #00ff00;
+            cursor: pointer;
+            border-radius: 50%;
+        }
+        input[type="range"]::-moz-range-thumb {
+            width: 18px;
+            height: 18px;
+            background: #00ff00;
+            cursor: pointer;
+            border-radius: 50%;
+            border: none;
+        }
+        .value-display {
+            display: inline-block;
+            float: right;
+            color: #ffff00;
+            font-weight: bold;
+            font-size: 14px;
+        }
+        #info {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(0,0,0,0.9);
+            padding: 15px;
+            border-radius: 10px;
+            z-index: 100;
+            font-size: 12px;
+            border: 2px solid #ff00ff;
+            min-width: 250px;
+        }
+        .info-item {
+            margin: 8px 0;
+            display: flex;
+            justify-content: space-between;
+        }
+        .info-label {
+            color: #aaaaaa;
+        }
+        .info-value {
+            color: #ffff00;
+            font-weight: bold;
+            margin-left: 15px;
+        }
+        .optimal-angle {
+            color: #00ff00;
+            font-size: 16px;
+            font-weight: bold;
+            text-align: center;
+            padding: 10px;
+            background: rgba(0,255,0,0.1);
+            border-radius: 5px;
+            margin-top: 10px;
+        }
+        .section-title {
+            color: #ff00ff;
+            font-weight: bold;
+            margin-top: 15px;
+            margin-bottom: 10px;
+            font-size: 13px;
+            border-bottom: 1px solid #ff00ff;
+            padding-bottom: 5px;
+        }
+        .axis-info {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(0,0,0,0.9);
+            padding: 15px;
+            border-radius: 10px;
+            z-index: 100;
+            border: 2px solid #ffaa00;
+        }
+        .axis-info h4 {
+            margin-top: 0;
+            color: #ffaa00;
+            font-size: 14px;
+        }
+        .axis-item {
+            margin: 8px 0;
+            font-size: 13px;
+        }
+    </style>
+</head>
+<body>
+    <div id="container"></div>
+
+    <div id="controls">
+        <h3>🎯 Shooter Parameters</h3>
+
+        <div class="section-title">POSITION</div>
+
+        <div class="control-group">
+            <label>X Position: <span class="value-display" id="xval">0.0 in</span></label>
+            <input type="range" id="shooterX" min="-500" max="500" step="1" value="0">
+        </div>
+
+        <div class="control-group">
+            <label>Y Position: <span class="value-display" id="yval">-150.0 in</span></label>
+            <input type="range" id="shooterY" min="-500" max="500" step="1" value="-150">
+        </div>
+
+        <div class="control-group">
+            <label>Z Height: <span class="value-display" id="heightval">15.0 in</span></label>
+            <input type="range" id="shooterHeight" min="0" max="30" step="0.5" value="15">
+        </div>
+
+        <div class="control-group">
+            <label>Rotation (Z-axis): <span class="value-display" id="rotval">0.0°</span></label>
+            <input type="range" id="rotation" min="-180" max="180" step="0.1" value="0">
+        </div>
+
+        <div class="section-title">LAUNCH</div>
+
+        <div class="control-group">
+            <label>Launch Angle: <span class="value-display" id="angleval">45.0°</span></label>
+            <input type="range" id="launchAngle" min="0" max="90" step="0.1" value="45">
+        </div>
+
+        <div class="control-group">
+            <label>Exit Velocity: <span class="value-display" id="speedval">40.0 ft/s</span></label>
+            <input type="range" id="launchSpeed" min="10" max="110" step="0.5" value="40">
+        </div>
+    </div>
+
+    <div id="info">
+        <h3 style="margin-top:0; color:#ff00ff; font-size:14px;">📊 Statistics</h3>
+
+        <div class="info-item">
+            <span class="info-label">Max Height:</span>
+            <span class="info-value" id="maxHeight">--</span>
+        </div>
+        <div class="info-item">
+            <span class="info-label">Flight Time:</span>
+            <span class="info-value" id="flightTime">--</span>
+        </div>
+        <div class="info-item">
+            <span class="info-label">Range:</span>
+            <span class="info-value" id="distance">--</span>
+        </div>
+
+        <div class="optimal-angle">
+            Optimal Angle: <span id="optimalAngle">--</span>
+        </div>
+    </div>
+
+    <div class="axis-info">
+        <h4>Axis Colors</h4>
+        <div class="axis-item" style="color: #ff0000;">● RED = X-axis</div>
+        <div class="axis-item" style="color: #00ff00;">● GREEN = Y-axis</div>
+        <div class="axis-item" style="color: #0000ff;">● BLUE = Z-axis (up)</div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+    <script>
+        // Physics constants
+        const g = 32.174 * 12;
+        const rho = 0.00237 / 1728;
+        const ballDiam = 5.5;
+        const ballRadius = ballDiam / 2;
+        const ballMass = 0.5 / 32.174;
+        const ballArea = Math.PI * ballRadius * ballRadius;
+        const Cd = 0.47;
+
+        // Cube dimensions
+        const cubeSize = 10;
+        const cubeHalfHeight = cubeSize / 2;
+
+        // Hexagon dimensions
+        const hexFlatToFlat = 41.7;
+        const hexSideLength = hexFlatToFlat / Math.sqrt(3);
+        const hexRadius = hexSideLength;
+        const rimHeight = 72;
+
+        // Calculate hexagon vertices
+        const hexVertices = [];
+        for (let i = 0; i < 6; i++) {
+            const angle = i * Math.PI / 3;
+            hexVertices.push({
+                x: hexRadius * Math.cos(angle),
+                y: hexRadius * Math.sin(angle)
+            });
+        }
+
+        // Setup scene
+        const container = document.getElementById('container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x0a0a0a);
+
+        // Camera
+        const camera = new THREE.PerspectiveCamera(
+            60,
+            window.innerWidth / window.innerHeight,
+            1,
+            5000
+        );
+        camera.position.set(-200, -300, 200);
+        camera.up.set(0, 0, 1);
+        camera.lookAt(0, 0, 50);
+
+        // Renderer
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        container.appendChild(renderer.domElement);
+
+        // OrbitControls
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.screenSpacePanning = true;
+        controls.minDistance = 50;
+        controls.maxDistance = 2000;
+        controls.target.set(0, 0, 50);
+
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
+
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.5);
+        dirLight.position.set(200, 200, 300);
+        scene.add(dirLight);
+
+        // Ground plane (XY plane at Z=0)
+        const groundGeom = new THREE.PlaneGeometry(1200, 1200);
+        const groundMat = new THREE.MeshBasicMaterial({ 
+            color: 0x1a1a1a, 
+            side: THREE.DoubleSide
+        });
+        const ground = new THREE.Mesh(groundGeom, groundMat);
+        ground.position.z = 0;
+        scene.add(ground);
+
+        // Axes helper (RED=X, GREEN=Y, BLUE=Z)
+        const axesHelper = new THREE.AxesHelper(150);
+        scene.add(axesHelper);
+
+        // Hub hexagon rim at (0, 0, 72)
+        const hexGroup = new THREE.Group();
+
+        // Hexagon shape
+        const hexShape = new THREE.Shape();
+        hexShape.moveTo(hexVertices[0].x, hexVertices[0].y);
+        for (let i = 1; i < 6; i++) {
+            hexShape.lineTo(hexVertices[i].x, hexVertices[i].y);
+        }
+        hexShape.lineTo(hexVertices[0].x, hexVertices[0].y);
+
+        // Hexagon fill
+        const hexGeom = new THREE.ShapeGeometry(hexShape);
+        const hexMat = new THREE.MeshBasicMaterial({ 
+            color: 0xff0000, 
+            side: THREE.DoubleSide,
+            transparent: true,
+            opacity: 0.3
+        });
+        const hexMesh = new THREE.Mesh(hexGeom, hexMat);
+        hexMesh.position.z = rimHeight;
+        hexGroup.add(hexMesh);
+
+        // Hexagon rim outline
+        const hexPoints = [];
+        for (let i = 0; i <= 6; i++) {
+            const v = hexVertices[i % 6];
+            hexPoints.push(new THREE.Vector3(v.x, v.y, rimHeight));
+        }
+        const hexLineGeom = new THREE.BufferGeometry().setFromPoints(hexPoints);
+        const hexLineMat = new THREE.LineBasicMaterial({ color: 0xff0000, linewidth: 3 });
+        const hexLine = new THREE.Line(hexLineGeom, hexLineMat);
+        hexGroup.add(hexLine);
+
+        // Support pillar
+        const pillarGeom = new THREE.CylinderGeometry(hexRadius * 0.6, hexRadius * 0.6, rimHeight, 6);
+        const pillarMat = new THREE.MeshBasicMaterial({ 
+            color: 0x333333, 
+            transparent: true, 
+            opacity: 0.3 
+        });
+        const pillar = new THREE.Mesh(pillarGeom, pillarMat);
+        pillar.position.z = rimHeight / 2;
+        pillar.rotation.x = Math.PI / 2;
+        hexGroup.add(pillar);
+
+        scene.add(hexGroup);
+
+        // Shooter - 10x10x10 CUBE
+        let shooterGroup = new THREE.Group();
+
+        const shooterCube = new THREE.Mesh(
+            new THREE.BoxGeometry(cubeSize, cubeSize, cubeSize),
+            new THREE.MeshBasicMaterial({ color: 0xffff00 })
+        );
+        shooterGroup.add(shooterCube);
+
+        scene.add(shooterGroup);
+
+        // Trajectory line
+        let trajectoryLine = null;
+
+        function calculateTrajectory(x0, y0, z0, speed, angle, rot) {
+            const speedInchesPerSec = speed * 12;
+            const angleRad = angle * Math.PI / 180;
+            const rotRad = rot * Math.PI / 180;
+
+            const vHoriz = speedInchesPerSec * Math.cos(angleRad);
+            const vx = vHoriz * Math.cos(rotRad);
+            const vy = vHoriz * Math.sin(rotRad);
+            const vz = speedInchesPerSec * Math.sin(angleRad);
+
+            const dt = 0.005;
+            const maxTime = 10;
+            const points = [];
+
+            let state = [x0, y0, z0, vx, vy, vz];
+
+            for (let t = 0; t < maxTime; t += dt) {
+                let [x, y, z, vx, vy, vz] = state;
+
+                if (z < 0 && points.length > 5) break;
+
+                points.push(new THREE.Vector3(x, y, z));
+
+                const v = Math.sqrt(vx*vx + vy*vy + vz*vz);
+                const Fdrag = 0.5 * Cd * rho * ballArea * v * v;
+
+                const Fdx = v > 0 ? -Fdrag * vx / v : 0;
+                const Fdy = v > 0 ? -Fdrag * vy / v : 0;
+                const Fdz = v > 0 ? -Fdrag * vz / v : 0;
+
+                const ax = Fdx / ballMass;
+                const ay = Fdy / ballMass;
+                const az = Fdz / ballMass - g;
+
+                state = [
+                    x + vx * dt,
+                    y + vy * dt,
+                    z + vz * dt,
+                    vx + ax * dt,
+                    vy + ay * dt,
+                    vz + az * dt
+                ];
+            }
+
+            return points;
+        }
+
+        function findOptimalAngle(speed) {
+            let maxRange = 0;
+            let optAngle = 45;
+
+            for (let angle = 0; angle <= 90; angle += 0.5) {
+                const points = calculateTrajectory(0, -150, 15, speed, angle, 0);
+                if (points.length > 1) {
+                    const lastPoint = points[points.length - 1];
+                    const range = Math.sqrt(lastPoint.x * lastPoint.x + lastPoint.y * lastPoint.y);
+                    if (range > maxRange) {
+                        maxRange = range;
+                        optAngle = angle;
+                    }
+                }
+            }
+
+            return optAngle;
+        }
+
+        function updateTrajectory() {
+            const x = parseFloat(document.getElementById('shooterX').value);
+            const y = parseFloat(document.getElementById('shooterY').value);
+            const launchHeight = parseFloat(document.getElementById('shooterHeight').value); // This is now arc start
+            const rot = parseFloat(document.getElementById('rotation').value);
+            const angle = parseFloat(document.getElementById('launchAngle').value);
+            const speed = parseFloat(document.getElementById('launchSpeed').value);
+
+            // Position cube so TOP is at launch height (center is 5 inches below)
+            const cubeCenter = launchHeight - cubeHalfHeight;
+            shooterGroup.position.set(x, y, cubeCenter);
+            shooterGroup.rotation.z = rot * Math.PI / 180;
+
+            if (trajectoryLine) scene.remove(trajectoryLine);
+
+            // Trajectory starts from the slider value (arc start = top of cube)
+            const points = calculateTrajectory(x, y, launchHeight, speed, angle, rot);
+
+            if (points.length > 1) {
+                const geom = new THREE.BufferGeometry().setFromPoints(points);
+                const mat = new THREE.LineBasicMaterial({ color: 0x00ffff, linewidth: 2 });
+
+                trajectoryLine = new THREE.Line(geom, mat);
+                scene.add(trajectoryLine);
+
+                const maxHeight = Math.max(...points.map(p => p.z));
+                const flightTime = points.length * 0.005;
+                const lastPoint = points[points.length - 1];
+                const range = Math.sqrt(
+                    Math.pow(lastPoint.x - x, 2) + 
+                    Math.pow(lastPoint.y - y, 2)
+                );
+
+                document.getElementById('maxHeight').textContent = maxHeight.toFixed(1) + ' in';
+                document.getElementById('flightTime').textContent = flightTime.toFixed(2) + ' s';
+                document.getElementById('distance').textContent = range.toFixed(1) + ' in';
+
+                const optAngle = findOptimalAngle(speed);
+                document.getElementById('optimalAngle').textContent = optAngle.toFixed(1) + '°';
+            }
+        }
+
+        document.getElementById('shooterX').oninput = function() {
+            document.getElementById('xval').textContent = this.value + ' in';
+            updateTrajectory();
+        };
+        document.getElementById('shooterY').oninput = function() {
+            document.getElementById('yval').textContent = this.value + ' in';
+            updateTrajectory();
+        };
+        document.getElementById('shooterHeight').oninput = function() {
+            document.getElementById('heightval').textContent = this.value + ' in';
+            updateTrajectory();
+        };
+        document.getElementById('rotation').oninput = function() {
+            document.getElementById('rotval').textContent = parseFloat(this.value).toFixed(1) + '°';
+            updateTrajectory();
+        };
+        document.getElementById('launchAngle').oninput = function() {
+            document.getElementById('angleval').textContent = parseFloat(this.value).toFixed(1) + '°';
+            updateTrajectory();
+        };
+        document.getElementById('launchSpeed').oninput = function() {
+            document.getElementById('speedval').textContent = parseFloat(this.value).toFixed(1) + ' ft/s';
+            updateTrajectory();
+        };
+
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        animate();
+        updateTrajectory();
+    </script>
+</body>
+</html>

@@ -53,6 +53,7 @@ def choose_serial_port():
 class SerialReader(threading.Thread):
     def __init__(self, port, data_queue):
         super().__init__(daemon=True)
+        self.port = port
         self.data_queue = data_queue
         self.ser = serial.Serial(port, BAUD_RATE, timeout=1)
         print(f"Serial port {port} opened. Waiting for data from the Arduino...")
@@ -61,7 +62,14 @@ class SerialReader(threading.Thread):
         last_good = time.monotonic()
         lines_seen = 0
         while True:
-            raw = self.ser.readline()
+            try:
+                raw = self.ser.readline()
+            except serial.SerialException as exc:
+                print(f"Serial connection dropped ({exc}). Reconnecting...")
+                self._reconnect()
+                last_good = time.monotonic()
+                continue
+
             if not raw:
                 if time.monotonic() - last_good > 3:
                     print(
@@ -94,6 +102,19 @@ class SerialReader(threading.Thread):
                 print(f"Received: X={x} Y={y} Z={z}")
             last_good = time.monotonic()
             self.data_queue.put((x, y, z))
+
+    def _reconnect(self):
+        try:
+            self.ser.close()
+        except Exception:
+            pass
+        while True:
+            try:
+                self.ser = serial.Serial(self.port, BAUD_RATE, timeout=1)
+                print(f"Reconnected to {self.port}.")
+                return
+            except serial.SerialException:
+                time.sleep(1)
 
 
 class BarDisplay:

@@ -16,6 +16,7 @@ If more than one serial port is found, you'll be prompted to pick one
 import sys
 import threading
 import queue
+import time
 import tkinter as tk
 
 import serial
@@ -54,19 +55,44 @@ class SerialReader(threading.Thread):
         super().__init__(daemon=True)
         self.data_queue = data_queue
         self.ser = serial.Serial(port, BAUD_RATE, timeout=1)
+        print(f"Serial port {port} opened. Waiting for data from the Arduino...")
 
     def run(self):
+        last_good = time.monotonic()
+        lines_seen = 0
         while True:
-            line = self.ser.readline().decode("utf-8", errors="ignore").strip()
-            if not line or line.startswith("ERR"):
+            raw = self.ser.readline()
+            if not raw:
+                if time.monotonic() - last_good > 3:
+                    print(
+                        "No data received in the last 3s. Check: sketch is uploaded "
+                        "and running, Serial Monitor/Plotter is closed in the Arduino "
+                        "IDE, and wiring (SDA/SCL/VIN/GND) is correct."
+                    )
+                    last_good = time.monotonic()
                 continue
+
+            line = raw.decode("utf-8", errors="ignore").strip()
+            if not line:
+                continue
+            if line.startswith("ERR"):
+                print(f"Arduino reported: {line}")
+                continue
+
             parts = line.split(",")
             if len(parts) != 3:
+                print(f"Ignoring unexpected line: {line!r}")
                 continue
             try:
                 x, y, z = (float(p) for p in parts)
             except ValueError:
+                print(f"Ignoring unparsable line: {line!r}")
                 continue
+
+            lines_seen += 1
+            if lines_seen <= 3:
+                print(f"Received: X={x} Y={y} Z={z}")
+            last_good = time.monotonic()
             self.data_queue.put((x, y, z))
 
 
@@ -156,7 +182,11 @@ def main():
     reader = SerialReader(port, data_queue)
     reader.start()
 
+    print("Opening display window - check your taskbar/Alt-Tab if you don't see it pop up.")
     root = tk.Tk()
+    root.lift()
+    root.attributes("-topmost", True)
+    root.after(500, lambda: root.attributes("-topmost", False))
     BarDisplay(root, data_queue)
     root.mainloop()
 

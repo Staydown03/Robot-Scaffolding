@@ -23,7 +23,12 @@ import serial
 import serial.tools.list_ports
 
 BAUD_RATE = 115200
-FULL_SCALE_UT = 133000  # +/- range shown by the bars; matches TMAG5273 x2 variant (133 mT)
+# +/- range shown by the bars, in microtesla. The sensor's mechanical range is
+# +/-133000 (x2 variant), but a small magnet a few cm away only shifts the
+# reading by a few hundred/thousand uT -- lower this to make the bars more
+# sensitive to a nearby magnet, raise it if they're pinning at max too easily.
+FULL_SCALE_UT = 20000
+SMOOTHING = 0.25  # 0-1; lower = smoother/slower, higher = snappier/noisier
 
 BG_COLOR = "#0d1b2a"
 PANEL_COLOR = "#122236"
@@ -168,6 +173,7 @@ class BarDisplay:
             self.bars.append((bar, x0, x1))
             self.value_texts.append(value_text)
 
+        self.smoothed = [0.0, 0.0, 0.0]
         self.poll()
 
     def set_bar(self, index, value):
@@ -190,7 +196,8 @@ class BarDisplay:
 
         if latest is not None:
             for i, value in enumerate(latest):
-                self.set_bar(i, value)
+                self.smoothed[i] += SMOOTHING * (value - self.smoothed[i])
+                self.set_bar(i, self.smoothed[i])
 
         self.root.after(30, self.poll)
 

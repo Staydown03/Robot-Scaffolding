@@ -48,6 +48,10 @@ void setup() {
       delay(10);
     }
   }
+
+  // Hardware-average 32 samples per reading instead of the default 1 -
+  // trades a bit of update speed for much less sensor noise.
+  tmag.setConversionAverage(TMAG5273_CONV_AVG_32X);
 }
 
 void loop() {

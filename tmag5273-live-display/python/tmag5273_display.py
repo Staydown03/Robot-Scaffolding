@@ -16,13 +16,19 @@ If more than one serial port is found, you'll be prompted to pick one
 import sys
 import threading
 import queue
+import time
 import tkinter as tk
 
 import serial
 import serial.tools.list_ports
 
 BAUD_RATE = 115200
-FULL_SCALE_UT = 133000  # +/- range shown by the bars; matches TMAG5273 x2 variant (133 mT)
+# +/- range shown by the bars, in microtesla. The sensor's mechanical range is
+# +/-133000 (x2 variant), but a small magnet a few cm away only shifts the
+# reading by a few hundred/thousand uT -- lower this to make the bars more
+# sensitive to a nearby magnet, raise it if they're pinning at max too easily.
+FULL_SCALE_UT = 20000
+SMOOTHING = 0.25  # 0-1; lower = smoother/slower, higher = snappier/noisier
 
 BG_COLOR = "#0d1b2a"
 PANEL_COLOR = "#122236"
@@ -52,22 +58,68 @@ def choose_serial_port():
 class SerialReader(threading.Thread):
     def __init__(self, port, data_queue):
         super().__init__(daemon=True)
+        self.port = port
         self.data_queue = data_queue
         self.ser = serial.Serial(port, BAUD_RATE, timeout=1)
+        print(f"Serial port {port} opened. Waiting for data from the Arduino...")
 
     def run(self):
+        last_good = time.monotonic()
+        lines_seen = 0
         while True:
-            line = self.ser.readline().decode("utf-8", errors="ignore").strip()
-            if not line or line.startswith("ERR"):
+            try:
+                raw = self.ser.readline()
+            except serial.SerialException as exc:
+                print(f"Serial connection dropped ({exc}). Reconnecting...")
+                self._reconnect()
+                last_good = time.monotonic()
                 continue
+
+            if not raw:
+                if time.monotonic() - last_good > 3:
+                    print(
+                        "No data received in the last 3s. Check: sketch is uploaded "
+                        "and running, Serial Monitor/Plotter is closed in the Arduino "
+                        "IDE, and wiring (SDA/SCL/VIN/GND) is correct."
+                    )
+                    last_good = time.monotonic()
+                continue
+
+            line = raw.decode("utf-8", errors="ignore").strip()
+            if not line:
+                continue
+            if line.startswith("ERR"):
+                print(f"Arduino reported: {line}")
+                continue
+
             parts = line.split(",")
             if len(parts) != 3:
+                print(f"Ignoring unexpected line: {line!r}")
                 continue
             try:
                 x, y, z = (float(p) for p in parts)
             except ValueError:
+                print(f"Ignoring unparsable line: {line!r}")
                 continue
+
+            lines_seen += 1
+            if lines_seen <= 3:
+                print(f"Received: X={x} Y={y} Z={z}")
+            last_good = time.monotonic()
             self.data_queue.put((x, y, z))
+
+    def _reconnect(self):
+        try:
+            self.ser.close()
+        except Exception:
+            pass
+        while True:
+            try:
+                self.ser = serial.Serial(self.port, BAUD_RATE, timeout=1)
+                print(f"Reconnected to {self.port}.")
+                return
+            except serial.SerialException:
+                time.sleep(1)
 
 
 class BarDisplay:
@@ -121,6 +173,7 @@ class BarDisplay:
             self.bars.append((bar, x0, x1))
             self.value_texts.append(value_text)
 
+        self.smoothed = [0.0, 0.0, 0.0]
         self.poll()
 
     def set_bar(self, index, value):
@@ -143,7 +196,8 @@ class BarDisplay:
 
         if latest is not None:
             for i, value in enumerate(latest):
-                self.set_bar(i, value)
+                self.smoothed[i] += SMOOTHING * (value - self.smoothed[i])
+                self.set_bar(i, self.smoothed[i])
 
         self.root.after(30, self.poll)
 
@@ -156,7 +210,11 @@ def main():
     reader = SerialReader(port, data_queue)
     reader.start()
 
+    print("Opening display window - check your taskbar/Alt-Tab if you don't see it pop up.")
     root = tk.Tk()
+    root.lift()
+    root.attributes("-topmost", True)
+    root.after(500, lambda: root.attributes("-topmost", False))
     BarDisplay(root, data_queue)
     root.mainloop()
 

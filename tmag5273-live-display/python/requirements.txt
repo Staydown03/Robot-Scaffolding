@@ -1,1 +1,9 @@
 pyserial>=3.5
+pyvista>=0.44
+
+# Optional: lets the viewer tessellate the real STEP file in cad/ instead of
+# rebuilding the board from its measured dimensions. Both give the same board;
+# installing this just means a revised CAD export drops straight in. It is a
+# large download (OpenCascade), so it is left out of the default install.
+#
+#   pip install cadquery-ocp
